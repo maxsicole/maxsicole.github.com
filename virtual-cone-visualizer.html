@@ -1,0 +1,1508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Virtual Cone Geometric Visualizer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root {
+    --bg: #0e1117;
+    --panel: #161b22;
+    --panel-border: #30363d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --accent: #58a6ff;
+    --accent-hover: #79c0ff;
+    --danger: #f85149;
+    --success: #3fb950;
+    --input-bg: #0d1117;
+    --input-border: #30363d;
+    --slider-track: #30363d;
+    --slider-thumb: #58a6ff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  .app {
+    display: grid;
+    grid-template-columns: 330px 1fr;
+    grid-template-rows: 1fr auto;
+    height: 100vh;
+    gap: 1px;
+    background: var(--panel-border);
+  }
+
+  .controls {
+    background: var(--panel);
+    grid-row: 1 / 3;
+    overflow-y: auto;
+    padding: 16px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--panel-border) transparent;
+  }
+  .controls::-webkit-scrollbar { width: 6px; }
+  .controls::-webkit-scrollbar-track { background: transparent; }
+  .controls::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 3px; }
+
+  .viewport {
+    background: var(--bg);
+    position: relative;
+  }
+  .viewport canvas { display: block; }
+
+  .slices {
+    background: var(--panel);
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1px;
+    background: var(--panel-border);
+    height: 240px;
+  }
+
+  .slice-container {
+    background: var(--bg);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px;
+  }
+  .slice-container canvas {
+    image-rendering: pixelated;
+    flex: 1;
+    max-height: calc(100% - 20px);
+    aspect-ratio: 1;
+  }
+  .slice-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 2px 0;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+
+  h1 { font-size: 15px; font-weight: 600; margin-bottom: 4px; letter-spacing: -0.2px; }
+  .subtitle { font-size: 11px; color: var(--text-dim); margin-bottom: 16px; }
+
+  .section {
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--panel-border);
+    padding-bottom: 12px;
+  }
+  .section:last-child { border-bottom: none; }
+
+  .section-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 1px; color: var(--text-dim); margin-bottom: 8px;
+  }
+
+  .field {
+    display: flex; align-items: center;
+    justify-content: space-between; margin-bottom: 6px;
+  }
+  .field label { font-size: 12px; flex-shrink: 0; }
+  .field-right { display: flex; align-items: center; gap: 6px; }
+  .field-hint {
+    font-size: 10px; color: var(--text-dim); margin: -4px 0 6px 0;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none;
+    width: 120px; height: 4px; background: var(--slider-track);
+    border-radius: 2px; outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px;
+    border-radius: 50%; background: var(--slider-thumb); cursor: pointer;
+  }
+
+  input[type="number"], select {
+    background: var(--input-bg); border: 1px solid var(--input-border);
+    color: var(--text); padding: 3px 6px; border-radius: 4px;
+    font-size: 12px; width: 60px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+  select { width: auto; cursor: pointer; }
+  input[type="number"]:focus, select:focus { outline: none; border-color: var(--accent); }
+
+  .btn {
+    background: transparent; border: 1px solid var(--panel-border);
+    color: var(--text); padding: 4px 10px; border-radius: 4px;
+    font-size: 11px; cursor: pointer; transition: all 0.15s;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 600; }
+  .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn-danger { border-color: var(--danger); color: var(--danger); }
+  .btn-danger:hover { background: var(--danger); color: #fff; }
+  .btn-sm { padding: 2px 6px; font-size: 10px; }
+
+  .arc-card {
+    background: var(--input-bg); border: 1px solid var(--input-border);
+    border-radius: 6px; padding: 10px; margin-bottom: 8px;
+  }
+  .arc-header {
+    display: flex; justify-content: space-between;
+    align-items: center; margin-bottom: 8px;
+  }
+  .arc-title { font-size: 12px; font-weight: 600; color: var(--accent); }
+
+  .stats-bar {
+    position: absolute; bottom: 8px; left: 8px;
+    font-size: 11px; color: var(--text-dim);
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    background: rgba(14,17,23,0.8); padding: 4px 8px;
+    border-radius: 4px; pointer-events: none;
+  }
+
+  .iso-display { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
+  .iso-chip {
+    font-size: 10px; padding: 2px 6px; border-radius: 3px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    cursor: pointer; border: 1px solid transparent; transition: all 0.15s;
+  }
+  .iso-chip:hover { opacity: 0.8; }
+  .iso-chip.active { border-color: #fff; }
+
+  .colorbar { width: 100%; height: 12px; border-radius: 2px; margin: 4px 0; }
+  .colorbar-labels {
+    display: flex; justify-content: space-between;
+    font-size: 10px; color: var(--text-dim);
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+
+  .checkbox-field { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .checkbox-field input[type="checkbox"] { accent-color: var(--accent); }
+  .checkbox-field label { font-size: 12px; cursor: pointer; }
+
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 12px;
+    margin-bottom: 8px;
+  }
+  .metric {
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 4px;
+    padding: 6px 8px;
+  }
+  .metric-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+  }
+  .metric-value {
+    font-size: 14px;
+    font-weight: 600;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--text);
+  }
+  .metric-unit {
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--text-dim);
+  }
+  .metric.wide { grid-column: 1 / -1; }
+
+  .sphere-legend {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+  .sphere-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .sphere-swatch {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    border: 1.5px solid;
+  }
+
+  .profile-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .profile-bar label {
+    font-size: 11px;
+    width: 14px;
+    text-align: center;
+    font-weight: 600;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+  .profile-track {
+    flex: 1;
+    height: 6px;
+    background: var(--input-bg);
+    border-radius: 3px;
+    position: relative;
+    overflow: hidden;
+  }
+  .profile-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.2s;
+  }
+  .profile-val {
+    font-size: 11px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    width: 55px;
+    text-align: right;
+    color: var(--text);
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="controls" id="controlsPanel">
+    <h1>Virtual Cone Visualizer</h1>
+    <p class="subtitle">Geometric Fluence Accumulation</p>
+
+    <!-- MLC Configuration -->
+    <div class="section">
+      <div class="section-title">MLC Configuration</div>
+      <div class="field">
+        <label>MLC Type</label>
+        <select id="mlcType" onchange="onMLCTypeChange()">
+          <option value="millennium" selected>Millennium 120</option>
+          <option value="hd120">HD 120</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Aperture Shape</label>
+        <select id="apertureShape" onchange="onParamChange()">
+          <option value="rectangular" selected>Rectangular</option>
+          <option value="circular">Circular (MLC-stepped)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Leaf Gap (mm)</label>
+        <div class="field-right">
+          <input type="range" id="fieldX" min="0.5" max="20" step="0.1" value="5" oninput="syncVal(this,'fieldXVal');onParamChange()">
+          <input type="number" id="fieldXVal" min="0.5" max="20" step="0.1" value="5" onchange="syncSlider(this,'fieldX');onParamChange()">
+        </div>
+      </div>
+      <div class="field-hint">Opening between opposing leaf tips</div>
+      <div class="field">
+        <label>Field Width (mm)</label>
+        <div class="field-right">
+          <input type="range" id="fieldY" min="5" max="30" step="5" value="5" oninput="syncVal(this,'fieldYVal');onParamChange()">
+          <input type="number" id="fieldYVal" min="5" max="30" step="5" value="5" onchange="syncSlider(this,'fieldY');onParamChange()">
+        </div>
+      </div>
+      <div class="field-hint" id="fieldYHint">Perpendicular to leaf travel (min = 1 leaf = 5 mm)</div>
+      <div id="customMLCFields" style="display:none;">
+        <div class="field">
+          <label>Leaf Width (mm)</label>
+          <input type="number" id="customLeafWidth" min="0.5" max="10" step="0.5" value="5" onchange="onMLCTypeChange()">
+        </div>
+      </div>
+    </div>
+
+    <!-- Grid Settings -->
+    <div class="section">
+      <div class="section-title">Grid Settings</div>
+      <div class="field">
+        <label>Resolution (mm)</label>
+        <select id="gridRes" onchange="onParamChange()">
+          <option value="0.5">0.5 (fine)</option>
+          <option value="1" selected>1.0 (standard)</option>
+          <option value="2">2.0 (fast)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Extent (±mm)</label>
+        <select id="gridExtent" onchange="onParamChange()">
+          <option value="8">8</option>
+          <option value="10" selected>10</option>
+          <option value="15">15</option>
+          <option value="20">20</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Angular Step (°)</label>
+        <select id="angStep" onchange="onParamChange()">
+          <option value="2">2 (fine)</option>
+          <option value="5" selected>5 (standard)</option>
+          <option value="10">10 (fast)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Presets -->
+    <div class="section">
+      <div class="section-title">Presets</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <button class="btn" onclick="applyPreset('popple')" title="Full 360° arc, collimator rotating 360°, sinusoidal dose rate">Popple Virtual Cone</button>
+        <button class="btn" onclick="applyPreset('static180')" title="Single 180° arc, static collimator">Static 180°</button>
+        <button class="btn" onclick="applyPreset('dual_couch')" title="Two arcs with orthogonal couch kicks">Dual Couch Kick</button>
+      </div>
+    </div>
+
+    <!-- Arcs -->
+    <div class="section">
+      <div class="section-title">Arcs</div>
+      <div id="arcsContainer"></div>
+      <button class="btn btn-primary" onclick="addArc()" style="width:100%;margin-top:6px;">+ Add Arc</button>
+    </div>
+
+    <!-- Display Settings -->
+    <div class="section">
+      <div class="section-title">3D Display</div>
+      <div class="field">
+        <label>Iso-surface Level</label>
+        <div class="field-right">
+          <input type="range" id="isoLevel" min="5" max="95" step="5" value="50" oninput="syncVal(this,'isoLevelVal');updateDisplay()">
+          <input type="number" id="isoLevelVal" min="5" max="95" step="5" value="50" onchange="syncSlider(this,'isoLevel');updateDisplay()">
+          <span style="font-size:11px;color:var(--text-dim)">%</span>
+        </div>
+      </div>
+      <div class="iso-display" id="isoChips"></div>
+      <div class="field">
+        <label>Opacity</label>
+        <div class="field-right">
+          <input type="range" id="opacity" min="0.1" max="1" step="0.05" value="0.7" oninput="updateDisplay()">
+        </div>
+      </div>
+      <div class="checkbox-field">
+        <input type="checkbox" id="showGantry" checked onchange="updateDisplay()">
+        <label for="showGantry">Show gantry arcs</label>
+      </div>
+      <div class="checkbox-field">
+        <input type="checkbox" id="showBeams" checked onchange="updateDisplay()">
+        <label for="showBeams">Show beam projections</label>
+      </div>
+      <div class="checkbox-field">
+        <input type="checkbox" id="showAxes" checked onchange="updateDisplay()">
+        <label for="showAxes">Show axes</label>
+      </div>
+      <div class="checkbox-field">
+        <input type="checkbox" id="showRefSpheres" checked onchange="updateDisplay()">
+        <label for="showRefSpheres">Reference spheres</label>
+      </div>
+      <div class="sphere-legend" id="sphereLegend">
+        <span class="sphere-legend-item"><span class="sphere-swatch" style="border-color:#ff6b6b"></span>2 mm</span>
+        <span class="sphere-legend-item"><span class="sphere-swatch" style="border-color:#ffd43b"></span>5 mm</span>
+        <span class="sphere-legend-item"><span class="sphere-swatch" style="border-color:#69db7c"></span>10 mm</span>
+      </div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="section">
+      <div class="section-title">Iso-surface Metrics</div>
+      <div class="metrics-grid">
+        <div class="metric">
+          <div class="metric-label">Width X</div>
+          <div class="metric-value" id="metricX">— <span class="metric-unit">mm</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Width Y</div>
+          <div class="metric-value" id="metricY">— <span class="metric-unit">mm</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Width Z</div>
+          <div class="metric-value" id="metricZ">— <span class="metric-unit">mm</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Volume</div>
+          <div class="metric-value" id="metricVol">— <span class="metric-unit">mm³</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Eq. Sphere ⌀</div>
+          <div class="metric-value" id="metricEqD">— <span class="metric-unit">mm</span></div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Sphericity</div>
+          <div class="metric-value" id="metricSph">—</div>
+        </div>
+      </div>
+      <div class="section-title" style="margin-top:8px">Dimension Profile</div>
+      <div>
+        <div class="profile-bar">
+          <label style="color:#ff4444">X</label>
+          <div class="profile-track"><div class="profile-fill" id="profileX" style="background:#ff4444;width:0%"></div></div>
+          <span class="profile-val" id="profileXVal">—</span>
+        </div>
+        <div class="profile-bar">
+          <label style="color:#44ff44">Y</label>
+          <div class="profile-track"><div class="profile-fill" id="profileY" style="background:#44ff44;width:0%"></div></div>
+          <span class="profile-val" id="profileYVal">—</span>
+        </div>
+        <div class="profile-bar">
+          <label style="color:#4488ff">Z</label>
+          <div class="profile-track"><div class="profile-fill" id="profileZ" style="background:#4488ff;width:0%"></div></div>
+          <span class="profile-val" id="profileZVal">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Colormap -->
+    <div class="section">
+      <div class="section-title">Colormap</div>
+      <div class="field">
+        <label>Scheme</label>
+        <select id="colormap" onchange="updateDisplay();updateSlices();updateColorbar()">
+          <option value="hot" selected>Hot</option>
+          <option value="viridis">Viridis</option>
+          <option value="jet">Jet</option>
+          <option value="cool">Cool</option>
+          <option value="dose">Dose (clinical)</option>
+        </select>
+      </div>
+      <canvas id="colorbarCanvas" class="colorbar" width="280" height="12"></canvas>
+      <div class="colorbar-labels"><span>0%</span><span>50%</span><span>100%</span></div>
+    </div>
+
+    <!-- Slice Controls -->
+    <div class="section">
+      <div class="section-title">Slice Position</div>
+      <div class="field">
+        <label>Axial (Z)</label>
+        <div class="field-right">
+          <input type="range" id="sliceZ" min="0" max="20" value="10" oninput="syncVal(this,'sliceZVal');updateSlices()">
+          <input type="number" id="sliceZVal" value="10" style="width:40px" onchange="syncSlider(this,'sliceZ');updateSlices()">
+        </div>
+      </div>
+      <div class="field">
+        <label>Coronal (Y)</label>
+        <div class="field-right">
+          <input type="range" id="sliceY" min="0" max="20" value="10" oninput="syncVal(this,'sliceYVal');updateSlices()">
+          <input type="number" id="sliceYVal" value="10" style="width:40px" onchange="syncSlider(this,'sliceY');updateSlices()">
+        </div>
+      </div>
+      <div class="field">
+        <label>Sagittal (X)</label>
+        <div class="field-right">
+          <input type="range" id="sliceX" min="0" max="20" value="10" oninput="syncVal(this,'sliceXVal');updateSlices()">
+          <input type="number" id="sliceXVal" value="10" style="width:40px" onchange="syncSlider(this,'sliceX');updateSlices()">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="viewport" id="viewport3d">
+    <div class="stats-bar" id="statsBar">Ready</div>
+  </div>
+
+  <div class="slices">
+    <div class="slice-container">
+      <canvas id="sliceAxial" width="200" height="200"></canvas>
+      <div class="slice-label">Axial (XY)</div>
+    </div>
+    <div class="slice-container">
+      <canvas id="sliceCoronal" width="200" height="200"></canvas>
+      <div class="slice-label">Coronal (XZ)</div>
+    </div>
+    <div class="slice-container">
+      <canvas id="sliceSagittal" width="200" height="200"></canvas>
+      <div class="slice-label">Sagittal (YZ)</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ========================
+// CONSTANTS & GLOBALS
+// ========================
+const SAD = 1000;
+const DEG = Math.PI / 180;
+
+let scene, camera, renderer, isoGroup, gantryGroup, axesGroup, beamGroup, refSphereGroup;
+let fluenceGrid = null;
+let gridDim = 21;
+let gridRes = 1.0;
+let gridExtent = 10;
+let maxFluence = 0;
+let computeTimer = null;
+let arcs = [];
+let arcIdCounter = 0;
+
+// MLC definitions: leaf positions at isocenter (mm)
+const MLC_DEFS = {
+  millennium: {
+    name: 'Millennium 120',
+    innerWidth: 5,
+    outerWidth: 10,
+    leaves: (() => {
+      const l = [];
+      let pos = -200;
+      for (let i = 0; i < 10; i++) { l.push({ center: pos + 5, width: 10 }); pos += 10; }
+      for (let i = 0; i < 40; i++) { l.push({ center: pos + 2.5, width: 5 }); pos += 5; }
+      for (let i = 0; i < 10; i++) { l.push({ center: pos + 5, width: 10 }); pos += 10; }
+      return l;
+    })()
+  },
+  hd120: {
+    name: 'HD 120',
+    innerWidth: 2.5,
+    outerWidth: 5,
+    leaves: (() => {
+      const l = [];
+      let pos = -110;
+      for (let i = 0; i < 14; i++) { l.push({ center: pos + 2.5, width: 5 }); pos += 5; }
+      for (let i = 0; i < 32; i++) { l.push({ center: pos + 1.25, width: 2.5 }); pos += 2.5; }
+      for (let i = 0; i < 14; i++) { l.push({ center: pos + 2.5, width: 5 }); pos += 5; }
+      return l;
+    })()
+  }
+};
+
+// ========================
+// MLC FIELD SIZE CONSTRAINTS
+// ========================
+function getMinLeafWidth(mlcType) {
+  if (mlcType === 'millennium') return 5;
+  if (mlcType === 'hd120') return 2.5;
+  // custom
+  return parseFloat(document.getElementById('customLeafWidth').value) || 5;
+}
+
+function enforceFieldConstraints() {
+  const mlcType = document.getElementById('mlcType').value;
+  const minW = getMinLeafWidth(mlcType);
+
+  // Field Width (Y): must be a multiple of the smallest leaf width
+  const fieldYSlider = document.getElementById('fieldY');
+  const fieldYInput = document.getElementById('fieldYVal');
+  fieldYSlider.min = minW;
+  fieldYSlider.step = minW;
+  fieldYInput.min = minW;
+  fieldYInput.step = minW;
+
+  // Snap current value to nearest valid value
+  let currentY = parseFloat(fieldYSlider.value);
+  currentY = Math.max(minW, Math.round(currentY / minW) * minW);
+  fieldYSlider.value = currentY;
+  fieldYInput.value = currentY;
+
+  // Update hint text
+  const hint = document.getElementById('fieldYHint');
+  hint.textContent = `Perpendicular to leaf travel (min = 1 leaf = ${minW} mm)`;
+
+  // Leaf gap (X): minimum ~0.5mm (rounded leaf tip physical limit)
+  const fieldXSlider = document.getElementById('fieldX');
+  const fieldXInput = document.getElementById('fieldXVal');
+  fieldXSlider.min = 0.5;
+  fieldXSlider.step = 0.1;
+  fieldXInput.min = 0.5;
+  fieldXInput.step = 0.1;
+}
+
+function onMLCTypeChange() {
+  const mlcType = document.getElementById('mlcType').value;
+  document.getElementById('customMLCFields').style.display = mlcType === 'custom' ? 'block' : 'none';
+  enforceFieldConstraints();
+  onParamChange();
+}
+
+// ========================
+// COLORMAPS
+// ========================
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function colormapHot(t) {
+  t = Math.max(0, Math.min(1, t));
+  return [Math.min(1, t * 3), Math.max(0, Math.min(1, (t - 0.333) * 3)), Math.max(0, Math.min(1, (t - 0.666) * 3))];
+}
+
+function colormapViridis(t) {
+  t = Math.max(0, Math.min(1, t));
+  const c = [
+    [0.267,0.004,0.329],[0.282,0.140,0.458],[0.253,0.265,0.530],
+    [0.206,0.372,0.553],[0.163,0.471,0.558],[0.128,0.567,0.551],
+    [0.134,0.658,0.517],[0.267,0.749,0.441],[0.478,0.821,0.318],
+    [0.741,0.873,0.150],[0.993,0.906,0.144]
+  ];
+  const idx = t * (c.length - 1);
+  const lo = Math.floor(idx), hi = Math.min(lo + 1, c.length - 1), f = idx - lo;
+  return [lerp(c[lo][0],c[hi][0],f), lerp(c[lo][1],c[hi][1],f), lerp(c[lo][2],c[hi][2],f)];
+}
+
+function colormapJet(t) {
+  t = Math.max(0, Math.min(1, t));
+  let r,g,b;
+  if (t<0.125){r=0;g=0;b=0.5+t*4;}
+  else if(t<0.375){r=0;g=(t-0.125)*4;b=1;}
+  else if(t<0.625){r=(t-0.375)*4;g=1;b=1-(t-0.375)*4;}
+  else if(t<0.875){r=1;g=1-(t-0.625)*4;b=0;}
+  else{r=1-(t-0.875)*4;g=0;b=0;}
+  return [Math.max(0,Math.min(1,r)),Math.max(0,Math.min(1,g)),Math.max(0,Math.min(1,b))];
+}
+
+function colormapCool(t) {
+  t = Math.max(0,Math.min(1,t));
+  return [t, 1-t, 1];
+}
+
+function colormapDose(t) {
+  t = Math.max(0,Math.min(1,t));
+  const c = [[0,0,0.6],[0,0.4,1],[0,0.8,0.8],[0,0.9,0.2],[0.9,0.9,0],[1,0.5,0],[1,0,0],[0.8,0,0.6]];
+  const idx = t*(c.length-1), lo = Math.floor(idx), hi = Math.min(lo+1,c.length-1), f = idx-lo;
+  return [lerp(c[lo][0],c[hi][0],f),lerp(c[lo][1],c[hi][1],f),lerp(c[lo][2],c[hi][2],f)];
+}
+
+function getColormap(name) {
+  const m = {hot:colormapHot,viridis:colormapViridis,jet:colormapJet,cool:colormapCool,dose:colormapDose};
+  return m[name] || colormapHot;
+}
+
+// ========================
+// GEOMETRY / COMPUTATION
+// ========================
+function getSourcePosition(gantryDeg, couchDeg) {
+  const theta = gantryDeg * DEG, phi = couchDeg * DEG;
+  return [
+    SAD * Math.sin(theta) * Math.cos(phi),
+    SAD * Math.cos(theta),
+    -SAD * Math.sin(theta) * Math.sin(phi)
+  ];
+}
+
+function cross(a,b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+function dot(a,b) { return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
+function normalize(v) {
+  const len = Math.sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);
+  return len < 1e-10 ? [0,0,1] : [v[0]/len,v[1]/len,v[2]/len];
+}
+
+function rotateAroundAxis(vec, axis, angleDeg) {
+  const a = angleDeg*DEG, c = Math.cos(a), s = Math.sin(a), d = dot(vec,axis), cr = cross(axis,vec);
+  return [
+    vec[0]*c + cr[0]*s + axis[0]*d*(1-c),
+    vec[1]*c + cr[1]*s + axis[1]*d*(1-c),
+    vec[2]*c + cr[2]*s + axis[2]*d*(1-c)
+  ];
+}
+
+function getBEVSystem(source, collimatorDeg) {
+  const w = normalize([-source[0],-source[1],-source[2]]);
+  let refUp = [0,0,1];
+  if (Math.abs(dot(w,refUp)) > 0.99) refUp = [0,1,0];
+  let u = normalize(cross(refUp,w));
+  let v = cross(w,u);
+  if (Math.abs(collimatorDeg) > 0.01) {
+    u = rotateAroundAxis(u,w,collimatorDeg);
+    v = rotateAroundAxis(v,w,collimatorDeg);
+  }
+  return {u,v,w};
+}
+
+function getDoseRateWeight(gantryAngle, startAngle, stopAngle, profile) {
+  const t = (gantryAngle - startAngle) / (stopAngle - startAngle);
+  switch(profile) {
+    case 'uniform': return 1.0;
+    case 'sinusoidal': return Math.sin(t * Math.PI);
+    case 'rampUp': return t;
+    case 'rampDown': return 1 - t;
+    case 'gaussian': { const x = (t-0.5)*4; return Math.exp(-x*x/2); }
+    default: return 1.0;
+  }
+}
+
+function getMLCLeaves(mlcType) {
+  if (mlcType === 'custom') {
+    const w = parseFloat(document.getElementById('customLeafWidth').value) || 5;
+    const l = [], n = Math.ceil(40/w);
+    let pos = -n*w;
+    for (let i=0; i<2*n; i++) { l.push({center:pos+w/2, width:w}); pos+=w; }
+    return l;
+  }
+  return MLC_DEFS[mlcType] ? MLC_DEFS[mlcType].leaves : MLC_DEFS.millennium.leaves;
+}
+
+function isInAperture(uProj, vProj, fieldX, fieldY, apertureShape, leaves) {
+  const halfX = fieldX/2, halfY = fieldY/2;
+  if (apertureShape === 'rectangular') {
+    return Math.abs(uProj) <= halfX && Math.abs(vProj) <= halfY;
+  }
+  // Circular MLC-stepped
+  const radius = Math.min(halfX, halfY);
+  for (const leaf of leaves) {
+    const top = leaf.center + leaf.width/2, bot = leaf.center - leaf.width/2;
+    if (vProj >= bot && vProj < top) {
+      if (Math.abs(leaf.center) >= radius) return false;
+      return Math.abs(uProj) <= Math.sqrt(radius*radius - leaf.center*leaf.center);
+    }
+  }
+  return false;
+}
+
+function computeFluence() {
+  const t0 = performance.now();
+
+  const mlcType = document.getElementById('mlcType').value;
+  const apertureShape = document.getElementById('apertureShape').value;
+  const fieldX = parseFloat(document.getElementById('fieldX').value);
+  const fieldY = parseFloat(document.getElementById('fieldY').value);
+  const angStep = parseFloat(document.getElementById('angStep').value);
+
+  gridRes = parseFloat(document.getElementById('gridRes').value);
+  gridExtent = parseFloat(document.getElementById('gridExtent').value);
+  gridDim = Math.round(2 * gridExtent / gridRes) + 1;
+
+  // Update slice sliders
+  ['sliceX','sliceY','sliceZ'].forEach(id => {
+    const el = document.getElementById(id);
+    el.max = gridDim - 1;
+    el.value = Math.floor(gridDim/2);
+    document.getElementById(id+'Val').value = el.value;
+  });
+
+  const leaves = getMLCLeaves(mlcType);
+  const grid = new Float32Array(gridDim * gridDim * gridDim);
+
+  // Precompute voxel coordinates
+  const coords = new Float32Array(gridDim);
+  for (let i=0; i<gridDim; i++) coords[i] = -gridExtent + i * gridRes;
+
+  let totalSamples = 0;
+
+  for (const arc of arcs) {
+    const {startAngle, stopAngle, couchAngle, collStart, collStop, doseRate} = arc;
+    if (Math.abs(stopAngle - startAngle) < 0.1) continue;
+
+    const nSamples = Math.max(1, Math.round(Math.abs(stopAngle - startAngle) / angStep));
+    const dAngle = (stopAngle - startAngle) / nSamples;
+
+    for (let s = 0; s <= nSamples; s++) {
+      const ga = startAngle + s * dAngle;
+      const weight = getDoseRateWeight(ga, startAngle, stopAngle, doseRate);
+      if (weight < 0.001) continue;
+
+      // Interpolate collimator angle across the arc
+      const collAngle = collStart + (collStop - collStart) * (s / nSamples);
+
+      const src = getSourcePosition(ga, couchAngle);
+      const {u,v,w} = getBEVSystem(src, collAngle);
+
+      for (let iz=0; iz<gridDim; iz++) {
+        const pz = coords[iz];
+        for (let iy=0; iy<gridDim; iy++) {
+          const py = coords[iy];
+          for (let ix=0; ix<gridDim; ix++) {
+            const px = coords[ix];
+            const vx=px-src[0], vy=py-src[1], vz=pz-src[2];
+            const d = vx*w[0]+vy*w[1]+vz*w[2];
+            if (d <= 0) continue;
+            const scale = SAD / d;
+            const uP = (vx*u[0]+vy*u[1]+vz*u[2])*scale;
+            const vP = (vx*v[0]+vy*v[1]+vz*v[2])*scale;
+            if (isInAperture(uP,vP,fieldX,fieldY,apertureShape,leaves)) {
+              grid[iz*gridDim*gridDim+iy*gridDim+ix] += weight;
+            }
+          }
+        }
+      }
+      totalSamples++;
+    }
+  }
+
+  maxFluence = 0;
+  for (let i=0; i<grid.length; i++) if (grid[i]>maxFluence) maxFluence=grid[i];
+
+  fluenceGrid = grid;
+
+  const dt = performance.now() - t0;
+  document.getElementById('statsBar').textContent =
+    `Grid: ${gridDim}\u00B3 = ${(gridDim**3).toLocaleString()} voxels | ${totalSamples} beams | ${dt.toFixed(0)} ms`;
+
+  updateDisplay();
+  updateSlices();
+  updateColorbar();
+}
+
+// ========================
+// THREE.JS
+// ========================
+function initThree() {
+  const container = document.getElementById('viewport3d');
+  const w = container.clientWidth, h = container.clientHeight;
+
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(45, w/h, 0.1, 5000);
+  camera.position.set(25,20,30);
+  camera.lookAt(0,0,0);
+
+  renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+  renderer.setSize(w,h);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  renderer.setClearColor(0x0e1117,1);
+  container.appendChild(renderer.domElement);
+
+  scene.add(new THREE.AmbientLight(0xffffff,0.7));
+  const dl = new THREE.DirectionalLight(0xffffff,0.6);
+  dl.position.set(20,30,20);
+  scene.add(dl);
+
+  isoGroup = new THREE.Group();
+  gantryGroup = new THREE.Group();
+  axesGroup = new THREE.Group();
+  beamGroup = new THREE.Group();
+  refSphereGroup = new THREE.Group();
+  scene.add(isoGroup, gantryGroup, axesGroup, beamGroup, refSphereGroup);
+
+  drawAxes();
+  drawRefSpheres();
+  setupOrbitControls(container);
+
+  window.addEventListener('resize', () => {
+    const w2=container.clientWidth, h2=container.clientHeight;
+    camera.aspect=w2/h2; camera.updateProjectionMatrix();
+    renderer.setSize(w2,h2);
+  });
+  animate();
+}
+
+function drawAxes() {
+  axesGroup.clear();
+  const len = 14;
+  [{d:[1,0,0],c:0xff4444,l:'X'},{d:[0,1,0],c:0x44ff44,l:'Y'},{d:[0,0,1],c:0x4488ff,l:'Z'}].forEach(a => {
+    const g = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0,0,0),
+      new THREE.Vector3(a.d[0]*len, a.d[1]*len, a.d[2]*len)
+    ]);
+    axesGroup.add(new THREE.Line(g, new THREE.LineBasicMaterial({color:a.c})));
+  });
+  // Isocenter dot
+  axesGroup.add(new THREE.Mesh(
+    new THREE.SphereGeometry(0.3,16,16),
+    new THREE.MeshBasicMaterial({color:0xffffff})
+  ));
+}
+
+function drawRefSpheres() {
+  refSphereGroup.clear();
+  const spheres = [
+    { diameter: 2,  color: 0xff6b6b, label: '2mm' },
+    { diameter: 5,  color: 0xffd43b, label: '5mm' },
+    { diameter: 10, color: 0x69db7c, label: '10mm' }
+  ];
+  spheres.forEach(s => {
+    const geo = new THREE.SphereGeometry(s.diameter / 2, 32, 24);
+    const edges = new THREE.EdgesGeometry(geo, 15);
+    const mat = new THREE.LineBasicMaterial({ color: s.color, transparent: true, opacity: 0.4 });
+    const wireframe = new THREE.LineSegments(edges, mat);
+    refSphereGroup.add(wireframe);
+
+    // Add equatorial rings (more visible than full wireframe)
+    [0, 1, 2].forEach(axis => {
+      const ringPts = [];
+      const n = 64;
+      for (let i = 0; i <= n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const r = s.diameter / 2;
+        if (axis === 0) ringPts.push(new THREE.Vector3(0, r*Math.cos(a), r*Math.sin(a)));
+        if (axis === 1) ringPts.push(new THREE.Vector3(r*Math.cos(a), 0, r*Math.sin(a)));
+        if (axis === 2) ringPts.push(new THREE.Vector3(r*Math.cos(a), r*Math.sin(a), 0));
+      }
+      const ringGeo = new THREE.BufferGeometry().setFromPoints(ringPts);
+      const ringMat = new THREE.LineBasicMaterial({ color: s.color, transparent: true, opacity: 0.6 });
+      refSphereGroup.add(new THREE.Line(ringGeo, ringMat));
+    });
+  });
+}
+
+function computeMetrics() {
+  if (!fluenceGrid || maxFluence === 0) {
+    clearMetrics();
+    return;
+  }
+
+  const isoLevel = parseFloat(document.getElementById('isoLevel').value) / 100;
+  const threshold = isoLevel * maxFluence;
+  const center = Math.floor(gridDim / 2);
+
+  // 1. Measure widths along each axis through the grid center
+  function measureWidth(getVal) {
+    // Find the extent of voxels above threshold along a 1D profile through center
+    let lo = -1, hi = -1;
+    for (let i = 0; i < gridDim; i++) {
+      if (getVal(i) >= threshold) {
+        if (lo === -1) lo = i;
+        hi = i;
+      }
+    }
+    if (lo === -1) return 0;
+
+    // Sub-voxel interpolation at edges
+    let loFrac = lo;
+    if (lo > 0) {
+      const below = getVal(lo - 1), above = getVal(lo);
+      if (above > below) loFrac = lo - 1 + (threshold - below) / (above - below);
+    }
+    let hiFrac = hi;
+    if (hi < gridDim - 1) {
+      const above = getVal(hi), below = getVal(hi + 1);
+      if (above > below) hiFrac = hi + (above - threshold) / (above - below);
+    }
+    return (hiFrac - loFrac) * gridRes;
+  }
+
+  const widthX = measureWidth(i => fluenceGrid[center * gridDim * gridDim + center * gridDim + i]);
+  const widthY = measureWidth(i => fluenceGrid[center * gridDim * gridDim + i * gridDim + center]);
+  const widthZ = measureWidth(i => fluenceGrid[i * gridDim * gridDim + center * gridDim + center]);
+
+  // 2. Volume: count voxels above threshold
+  let voxelCount = 0;
+  for (let i = 0; i < fluenceGrid.length; i++) {
+    if (fluenceGrid[i] >= threshold) voxelCount++;
+  }
+  const voxelVol = gridRes * gridRes * gridRes;
+  const volume = voxelCount * voxelVol;
+
+  // 3. Equivalent sphere diameter
+  const eqDiam = 2 * Math.pow((3 * volume) / (4 * Math.PI), 1 / 3);
+
+  // 4. Sphericity: ratio of surface area of equivalent sphere to actual surface area
+  // Approximate surface area by counting exposed voxel faces
+  let surfaceFaces = 0;
+  for (let iz = 0; iz < gridDim; iz++) {
+    for (let iy = 0; iy < gridDim; iy++) {
+      for (let ix = 0; ix < gridDim; ix++) {
+        if (fluenceGrid[iz*gridDim*gridDim+iy*gridDim+ix] < threshold) continue;
+        // Check 6 neighbors
+        const neighbors = [
+          [ix-1,iy,iz],[ix+1,iy,iz],[ix,iy-1,iz],[ix,iy+1,iz],[ix,iy,iz-1],[ix,iy,iz+1]
+        ];
+        for (const [nx,ny,nz] of neighbors) {
+          if (nx<0||nx>=gridDim||ny<0||ny>=gridDim||nz<0||nz>=gridDim) {
+            surfaceFaces++;
+          } else if (fluenceGrid[nz*gridDim*gridDim+ny*gridDim+nx] < threshold) {
+            surfaceFaces++;
+          }
+        }
+      }
+    }
+  }
+  const surfaceArea = surfaceFaces * gridRes * gridRes;
+  const eqSphereArea = Math.PI * eqDiam * eqDiam; // surface area of sphere with same volume
+  const sphericity = surfaceArea > 0 ? eqSphereArea / surfaceArea : 0;
+
+  // Update UI
+  document.getElementById('metricX').innerHTML = `${widthX.toFixed(1)} <span class="metric-unit">mm</span>`;
+  document.getElementById('metricY').innerHTML = `${widthY.toFixed(1)} <span class="metric-unit">mm</span>`;
+  document.getElementById('metricZ').innerHTML = `${widthZ.toFixed(1)} <span class="metric-unit">mm</span>`;
+  document.getElementById('metricVol').innerHTML = `${volume.toFixed(1)} <span class="metric-unit">mm³</span>`;
+  document.getElementById('metricEqD').innerHTML = `${eqDiam.toFixed(2)} <span class="metric-unit">mm</span>`;
+  document.getElementById('metricSph').innerHTML = `${sphericity.toFixed(3)}`;
+
+  // Dimension profile bars
+  const maxW = Math.max(widthX, widthY, widthZ, 0.01);
+  document.getElementById('profileX').style.width = (widthX/maxW*100)+'%';
+  document.getElementById('profileY').style.width = (widthY/maxW*100)+'%';
+  document.getElementById('profileZ').style.width = (widthZ/maxW*100)+'%';
+  document.getElementById('profileXVal').textContent = widthX.toFixed(1)+' mm';
+  document.getElementById('profileYVal').textContent = widthY.toFixed(1)+' mm';
+  document.getElementById('profileZVal').textContent = widthZ.toFixed(1)+' mm';
+}
+
+function clearMetrics() {
+  ['metricX','metricY','metricZ'].forEach(id => {
+    document.getElementById(id).innerHTML = '— <span class="metric-unit">mm</span>';
+  });
+  document.getElementById('metricVol').innerHTML = '— <span class="metric-unit">mm³</span>';
+  document.getElementById('metricEqD').innerHTML = '— <span class="metric-unit">mm</span>';
+  document.getElementById('metricSph').innerHTML = '—';
+  ['profileX','profileY','profileZ'].forEach(id => {
+    document.getElementById(id).style.width = '0%';
+  });
+  ['profileXVal','profileYVal','profileZVal'].forEach(id => {
+    document.getElementById(id).textContent = '—';
+  });
+}
+
+function setupOrbitControls(container) {
+  let isDragging=false, prevX=0, prevY=0;
+  let sph = {r:45, theta:Math.PI/4, phi:Math.PI/6};
+
+  function upd() {
+    camera.position.set(
+      sph.r*Math.sin(sph.theta)*Math.cos(sph.phi),
+      sph.r*Math.cos(sph.theta),
+      sph.r*Math.sin(sph.theta)*Math.sin(sph.phi)
+    );
+    camera.lookAt(0,0,0);
+  }
+
+  container.addEventListener('pointerdown', e => {
+    isDragging=true; prevX=e.clientX; prevY=e.clientY;
+    container.setPointerCapture(e.pointerId);
+  });
+  container.addEventListener('pointermove', e => {
+    if (!isDragging) return;
+    sph.phi -= (e.clientX-prevX)*0.008;
+    sph.theta = Math.max(0.1,Math.min(Math.PI-0.1, sph.theta+(e.clientY-prevY)*0.008));
+    prevX=e.clientX; prevY=e.clientY; upd();
+  });
+  container.addEventListener('pointerup', e => {
+    isDragging=false; container.releasePointerCapture(e.pointerId);
+  });
+  container.addEventListener('wheel', e => {
+    e.preventDefault();
+    sph.r = Math.max(10,Math.min(150, sph.r+e.deltaY*0.05));
+    upd();
+  }, {passive:false});
+  upd();
+}
+
+function animate() { requestAnimationFrame(animate); renderer.render(scene,camera); }
+
+// ========================
+// 3D DISPLAY — MERGED GEOMETRY
+// ========================
+function updateDisplay() {
+  if (!fluenceGrid || maxFluence === 0) return;
+
+  const isoLevel = parseFloat(document.getElementById('isoLevel').value)/100;
+  const opacity = parseFloat(document.getElementById('opacity').value);
+  const showGantryArcs = document.getElementById('showGantry').checked;
+  const showBeams = document.getElementById('showBeams').checked;
+  const showAxesBool = document.getElementById('showAxes').checked;
+  const cmap = getColormap(document.getElementById('colormap').value);
+
+  const showRefSph = document.getElementById('showRefSpheres').checked;
+
+  isoGroup.clear(); gantryGroup.clear(); beamGroup.clear();
+  axesGroup.visible = showAxesBool;
+  refSphereGroup.visible = showRefSph;
+
+  const threshold = isoLevel * maxFluence;
+
+  // Collect visible voxels
+  const voxels = [];
+  for (let iz=0; iz<gridDim; iz++) {
+    for (let iy=0; iy<gridDim; iy++) {
+      for (let ix=0; ix<gridDim; ix++) {
+        const val = fluenceGrid[iz*gridDim*gridDim+iy*gridDim+ix];
+        if (val >= threshold) {
+          voxels.push({
+            x: -gridExtent+ix*gridRes,
+            y: -gridExtent+iy*gridRes,
+            z: -gridExtent+iz*gridRes,
+            t: val/maxFluence
+          });
+        }
+      }
+    }
+  }
+
+  if (voxels.length > 0) {
+    // Build merged box geometry: 8 verts + 36 indices per voxel
+    const nv = voxels.length;
+    const positions = new Float32Array(nv * 8 * 3);
+    const colors = new Float32Array(nv * 8 * 3);
+    const indices = [];
+    const hs = gridRes * 0.48; // half-size with small gap
+
+    // Cube corner offsets
+    const offs = [
+      [-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],
+      [-1,-1, 1],[1,-1, 1],[1,1, 1],[-1,1, 1]
+    ];
+    // 12 triangles (6 faces)
+    const fi = [
+      0,1,2,0,2,3, 4,6,5,4,7,6, 0,4,5,0,5,1,
+      2,6,7,2,7,3, 0,7,4,0,3,7, 1,5,6,1,6,2
+    ];
+
+    for (let i=0; i<nv; i++) {
+      const {x,y,z,t} = voxels[i];
+      const [cr,cg,cb] = cmap(t);
+      const base = i * 8;
+
+      for (let j=0; j<8; j++) {
+        const vi = (base+j)*3;
+        positions[vi]   = x + offs[j][0]*hs;
+        positions[vi+1] = y + offs[j][1]*hs;
+        positions[vi+2] = z + offs[j][2]*hs;
+        colors[vi]   = cr;
+        colors[vi+1] = cg;
+        colors[vi+2] = cb;
+      }
+
+      for (let j=0; j<36; j++) {
+        indices.push(base + fi[j]);
+      }
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+
+    const mat = new THREE.MeshBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: opacity,
+      side: THREE.FrontSide,
+      depthWrite: opacity > 0.9
+    });
+
+    isoGroup.add(new THREE.Mesh(geo, mat));
+  }
+
+  // Gantry arcs
+  if (showGantryArcs) {
+    const arcCols = [0x58a6ff,0x3fb950,0xf0883e,0xf85149,0xbc8cff,0x79c0ff];
+    arcs.forEach((arc,i) => drawGantryArc(arc, arcCols[i%arcCols.length]));
+  }
+
+  // Beam projections
+  if (showBeams) {
+    const fieldX = parseFloat(document.getElementById('fieldX').value);
+    const fieldY = parseFloat(document.getElementById('fieldY').value);
+    arcs.forEach(arc => {
+      const nShow = Math.max(4, Math.min(12, Math.round(Math.abs(arc.stopAngle-arc.startAngle)/30)));
+      const range = arc.stopAngle - arc.startAngle;
+      for (let i=0; i<nShow; i++) {
+        const t = nShow > 1 ? i/(nShow-1) : 0;
+        const angle = arc.startAngle + range * t;
+        const collAngle = arc.collStart + (arc.collStop - arc.collStart) * t;
+        drawBeamProjection(angle, arc.couchAngle, collAngle, fieldX, fieldY);
+      }
+    });
+  }
+
+  updateIsoChips();
+  computeMetrics();
+}
+
+function drawGantryArc(arc, color) {
+  const pts = [], r = 20, n = 60;
+  for (let i=0; i<=n; i++) {
+    const a = (arc.startAngle + (arc.stopAngle-arc.startAngle)*i/n)*DEG;
+    const p = arc.couchAngle*DEG;
+    pts.push(new THREE.Vector3(r*Math.sin(a)*Math.cos(p), r*Math.cos(a), -r*Math.sin(a)*Math.sin(p)));
+  }
+  gantryGroup.add(new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineBasicMaterial({color})
+  ));
+  // End marker
+  const m = new THREE.Mesh(new THREE.SphereGeometry(0.4,8,8), new THREE.MeshBasicMaterial({color}));
+  m.position.copy(pts[pts.length-1]);
+  gantryGroup.add(m);
+  // Start marker
+  const m2 = new THREE.Mesh(new THREE.SphereGeometry(0.3,8,8), new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.5}));
+  m2.position.copy(pts[0]);
+  gantryGroup.add(m2);
+}
+
+function drawBeamProjection(gantryAngle, couchAngle, collimatorAngle, fieldX, fieldY) {
+  const src = getSourcePosition(gantryAngle, couchAngle);
+  const {u,v} = getBEVSystem(src, collimatorAngle);
+  const scale = 20/SAD;
+  const sx=src[0]*scale, sy=src[1]*scale, sz=src[2]*scale;
+  const hx=fieldX/2, hy=fieldY/2;
+  const corners = [[-hx,-hy],[hx,-hy],[hx,hy],[-hx,hy]];
+
+  const beamMat = new THREE.LineBasicMaterial({color:0xffffff, transparent:true, opacity:0.1});
+
+  corners.forEach(([cu,cv]) => {
+    const px=cu*u[0]+cv*v[0], py=cu*u[1]+cv*v[1], pz=cu*u[2]+cv*v[2];
+    const g = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(sx,sy,sz), new THREE.Vector3(px,py,pz)
+    ]);
+    beamGroup.add(new THREE.Line(g, beamMat));
+  });
+
+  // Field rectangle at iso
+  const rp = [];
+  for (let i=0; i<=4; i++) {
+    const [cu,cv] = corners[i%4];
+    rp.push(new THREE.Vector3(cu*u[0]+cv*v[0], cu*u[1]+cv*v[1], cu*u[2]+cv*v[2]));
+  }
+  beamGroup.add(new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(rp),
+    new THREE.LineBasicMaterial({color:0xffd700, transparent:true, opacity:0.3})
+  ));
+}
+
+// ========================
+// 2D SLICES
+// ========================
+function updateSlices() {
+  if (!fluenceGrid || maxFluence===0) return;
+  const cmap = getColormap(document.getElementById('colormap').value);
+  const sZ = parseInt(document.getElementById('sliceZ').value);
+  const sY = parseInt(document.getElementById('sliceY').value);
+  const sX = parseInt(document.getElementById('sliceX').value);
+
+  drawSlice('sliceAxial',  (x,y)=>fluenceGrid[sZ*gridDim*gridDim+y*gridDim+x], gridDim, gridDim, cmap);
+  drawSlice('sliceCoronal',(x,z)=>fluenceGrid[z*gridDim*gridDim+sY*gridDim+x], gridDim, gridDim, cmap);
+  drawSlice('sliceSagittal',(y,z)=>fluenceGrid[z*gridDim*gridDim+y*gridDim+sX], gridDim, gridDim, cmap);
+}
+
+function drawSlice(canvasId, getValue, w, h, cmap) {
+  const canvas = document.getElementById(canvasId);
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(w, h);
+
+  for (let y=0; y<h; y++) {
+    for (let x=0; x<w; x++) {
+      const t = maxFluence > 0 ? getValue(x,y)/maxFluence : 0;
+      const [r,g,b] = cmap(t);
+      const idx = ((h-1-y)*w+x)*4;
+      img.data[idx]   = Math.round(r*255);
+      img.data[idx+1] = Math.round(g*255);
+      img.data[idx+2] = Math.round(b*255);
+      img.data[idx+3] = t > 0.005 ? 255 : 0;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+function updateColorbar() {
+  const canvas = document.getElementById('colorbarCanvas');
+  const ctx = canvas.getContext('2d');
+  const cmap = getColormap(document.getElementById('colormap').value);
+  for (let x=0; x<canvas.width; x++) {
+    const [r,g,b] = cmap(x/(canvas.width-1));
+    ctx.fillStyle = `rgb(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)})`;
+    ctx.fillRect(x,0,1,canvas.height);
+  }
+}
+
+// ========================
+// ISO CHIPS
+// ========================
+function updateIsoChips() {
+  const container = document.getElementById('isoChips');
+  const cur = parseFloat(document.getElementById('isoLevel').value);
+  const cmap = getColormap(document.getElementById('colormap').value);
+  container.innerHTML = '';
+  [20,40,50,60,80,90,95].forEach(lv => {
+    const chip = document.createElement('span');
+    const [r,g,b] = cmap(lv/100);
+    chip.className = 'iso-chip' + (lv===cur?' active':'');
+    chip.style.background = `rgba(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)},0.3)`;
+    chip.style.color = `rgb(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)})`;
+    chip.textContent = lv+'%';
+    chip.onclick = () => {
+      document.getElementById('isoLevel').value=lv;
+      document.getElementById('isoLevelVal').value=lv;
+      updateDisplay();
+    };
+    container.appendChild(chip);
+  });
+}
+
+// ========================
+// ARC MANAGEMENT
+// ========================
+function addArc(params) {
+  const id = arcIdCounter++;
+  arcs.push({id, startAngle:0, stopAngle:180, couchAngle:0, collStart:0, collStop:0, doseRate:'uniform', ...params});
+  renderArcs();
+  onParamChange();
+}
+
+function removeArc(id) {
+  arcs = arcs.filter(a=>a.id!==id);
+  renderArcs(); onParamChange();
+}
+
+function updateArcParam(id, key, value) {
+  const arc = arcs.find(a=>a.id===id);
+  if (arc) { arc[key]=value; onParamChange(); }
+}
+
+function renderArcs() {
+  const container = document.getElementById('arcsContainer');
+  container.innerHTML = '';
+  arcs.forEach((arc,idx) => {
+    const card = document.createElement('div');
+    card.className = 'arc-card';
+    card.innerHTML = `
+      <div class="arc-header">
+        <span class="arc-title">Arc ${idx+1}</span>
+        ${arcs.length>1?`<button class="btn btn-danger btn-sm" onclick="removeArc(${arc.id})">Remove</button>`:''}
+      </div>
+      <div class="field">
+        <label>Start (°)</label>
+        <div class="field-right">
+          <input type="range" min="0" max="359" step="1" value="${arc.startAngle}"
+            oninput="this.nextElementSibling.value=this.value;updateArcParam(${arc.id},'startAngle',+this.value)">
+          <input type="number" min="0" max="359" value="${arc.startAngle}" style="width:50px"
+            onchange="this.previousElementSibling.value=this.value;updateArcParam(${arc.id},'startAngle',+this.value)">
+        </div>
+      </div>
+      <div class="field">
+        <label>Stop (°)</label>
+        <div class="field-right">
+          <input type="range" min="0" max="360" step="1" value="${arc.stopAngle}"
+            oninput="this.nextElementSibling.value=this.value;updateArcParam(${arc.id},'stopAngle',+this.value)">
+          <input type="number" min="0" max="360" value="${arc.stopAngle}" style="width:50px"
+            onchange="this.previousElementSibling.value=this.value;updateArcParam(${arc.id},'stopAngle',+this.value)">
+        </div>
+      </div>
+      <div class="field">
+        <label>Couch (°)</label>
+        <div class="field-right">
+          <input type="range" min="-90" max="90" step="1" value="${arc.couchAngle}"
+            oninput="this.nextElementSibling.value=this.value;updateArcParam(${arc.id},'couchAngle',+this.value)">
+          <input type="number" min="-90" max="90" value="${arc.couchAngle}" style="width:50px"
+            onchange="this.previousElementSibling.value=this.value;updateArcParam(${arc.id},'couchAngle',+this.value)">
+        </div>
+      </div>
+      <div class="field">
+        <label>Coll. Start (°)</label>
+        <div class="field-right">
+          <input type="range" min="0" max="360" step="1" value="${arc.collStart}"
+            oninput="this.nextElementSibling.value=this.value;updateArcParam(${arc.id},'collStart',+this.value)">
+          <input type="number" min="0" max="360" value="${arc.collStart}" style="width:50px"
+            onchange="this.previousElementSibling.value=this.value;updateArcParam(${arc.id},'collStart',+this.value)">
+        </div>
+      </div>
+      <div class="field">
+        <label>Coll. Stop (°)</label>
+        <div class="field-right">
+          <input type="range" min="0" max="360" step="1" value="${arc.collStop}"
+            oninput="this.nextElementSibling.value=this.value;updateArcParam(${arc.id},'collStop',+this.value)">
+          <input type="number" min="0" max="360" value="${arc.collStop}" style="width:50px"
+            onchange="this.previousElementSibling.value=this.value;updateArcParam(${arc.id},'collStop',+this.value)">
+        </div>
+      </div>
+      <div class="field-hint" style="font-style:italic">${arc.collStart === arc.collStop ? 'Static collimator' : 'Rotating ' + (arc.collStop - arc.collStart) + '° during arc'}</div>
+      <div class="field">
+        <label>Dose Rate</label>
+        <select onchange="updateArcParam(${arc.id},'doseRate',this.value)">
+          <option value="uniform" ${arc.doseRate==='uniform'?'selected':''}>Uniform</option>
+          <option value="sinusoidal" ${arc.doseRate==='sinusoidal'?'selected':''}>Sinusoidal</option>
+          <option value="gaussian" ${arc.doseRate==='gaussian'?'selected':''}>Gaussian</option>
+          <option value="rampUp" ${arc.doseRate==='rampUp'?'selected':''}>Ramp Up</option>
+          <option value="rampDown" ${arc.doseRate==='rampDown'?'selected':''}>Ramp Down</option>
+        </select>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+// ========================
+// UTILITIES
+// ========================
+function syncVal(slider, inputId) { document.getElementById(inputId).value = slider.value; }
+function syncSlider(input, sliderId) { document.getElementById(sliderId).value = input.value; }
+
+function onParamChange() {
+  clearTimeout(computeTimer);
+  computeTimer = setTimeout(computeFluence, 150);
+}
+
+// ========================
+// PRESETS
+// ========================
+function applyPreset(name) {
+  arcs = [];
+  arcIdCounter = 0;
+
+  switch(name) {
+    case 'popple':
+      // Popple et al. virtual cone technique:
+      // 10 arcs across 5 couch angles, 2 collimator angles (45° and 135°).
+      // Couch 0°: full 360° gantry rotation.
+      // Couch 36°, 72°, 288°, 324°: 180° gantry arcs.
+      // Sinusoidal dose rate modulation on each arc.
+      document.getElementById('mlcType').value = 'millennium';
+      onMLCTypeChange();
+      document.getElementById('apertureShape').value = 'rectangular';
+      document.getElementById('fieldX').value = 3;
+      document.getElementById('fieldXVal').value = 3;
+      document.getElementById('fieldY').value = 5;
+      document.getElementById('fieldYVal').value = 5;
+      document.getElementById('gridRes').value = '1';
+      document.getElementById('gridExtent').value = '10';
+      document.getElementById('angStep').value = '5';
+      {
+        const couchAngles = [0, 36, 72, 288, 324];
+        const collAngles = [45, 135];
+        for (const couch of couchAngles) {
+          for (const coll of collAngles) {
+            const fullArc = (couch === 0);
+            addArc({
+              startAngle: fullArc ? 0 : 0,
+              stopAngle: fullArc ? 360 : 180,
+              couchAngle: couch,
+              collStart: coll,
+              collStop: coll,
+              doseRate: 'sinusoidal'
+            });
+          }
+        }
+      }
+      break;
+
+    case 'static180':
+      // Simple single 180° arc, static collimator, uniform dose rate
+      document.getElementById('apertureShape').value = 'rectangular';
+      addArc({
+        startAngle: 0,
+        stopAngle: 180,
+        couchAngle: 0,
+        collStart: 0,
+        collStop: 0,
+        doseRate: 'uniform'
+      });
+      break;
+
+    case 'dual_couch':
+      // Two arcs with orthogonal couch kicks for improved sphericity
+      document.getElementById('apertureShape').value = 'rectangular';
+      addArc({
+        startAngle: 0,
+        stopAngle: 360,
+        couchAngle: 0,
+        collStart: 0,
+        collStop: 0,
+        doseRate: 'uniform'
+      });
+      addArc({
+        startAngle: 0,
+        stopAngle: 360,
+        couchAngle: 90,
+        collStart: 0,
+        collStop: 0,
+        doseRate: 'uniform'
+      });
+      break;
+  }
+}
+
+// ========================
+// INIT
+// ========================
+window.addEventListener('DOMContentLoaded', () => {
+  initThree();
+  enforceFieldConstraints();
+  addArc({startAngle:0, stopAngle:180, couchAngle:0, collStart:0, collStop:0, doseRate:'uniform'});
+  updateColorbar();
+});
+</script>
+</body>
+</html>
